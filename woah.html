@@ -1,0 +1,1149 @@
+<!doctype html>
+<html lang="en">
+<head>
+	<meta charset="utf-8">
+	<meta name="viewport" content="width=device-width, initial-scale=1">
+	<title>beat your bros</title>
+	<style>
+		@import url('https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&family=Manrope:wght@400;500;600;700&display=swap');
+
+		:root {
+			color-scheme: dark;
+			--ink: #f5f4ef;
+			--muted: #aaa9a2;
+			--line: rgba(245, 244, 239, .2);
+			--panel: rgba(24, 29, 30, .78);
+			--lime: #d5f27a;
+		}
+
+		* { box-sizing: border-box; }
+		html, body { width: 100%; height: 100%; margin: 0; overflow: hidden; }
+		body { background: #bac7c4; color: var(--ink); font-family: Manrope, sans-serif; }
+		canvas { display: block; width: 100%; height: 100%; }
+
+		.hud { position: fixed; inset: 0; pointer-events: none; }
+		.fps-counter { position: absolute; top: 52px; left: 28px; color: #f4f3ed; font: 10px "DM Mono", monospace; text-shadow: 0 1px 12px rgba(0,0,0,.4); }
+		.arena-timer { position: absolute; top: 70px; left: 28px; color: #ffaaaa; font: 10px "DM Mono", monospace; text-shadow: 0 0 8px rgba(255,25,25,.6); }
+		.arena-timer.hidden { display: none; }
+		.coordinates { position: absolute; left: 28px; bottom: 25px; color: #f4f3ed; font: 10px "DM Mono", monospace; text-shadow: 0 1px 12px rgba(0,0,0,.4); }
+		.coordinates span { color: var(--lime); }
+
+		.crosshair { position: absolute; left: 50%; top: 50%; width: 18px; height: 18px; transform: translate(-50%, -50%); opacity: .8; transition: opacity .2s; }
+		.crosshair::before, .crosshair::after { content: ""; position: absolute; background: white; box-shadow: 0 1px 3px #303636; }
+		.crosshair::before { width: 1px; height: 18px; left: 8px; top: 0; }
+		.crosshair::after { width: 18px; height: 1px; left: 0; top: 8px; }
+		body:not(.locked) .crosshair { opacity: 0; }
+
+		.help {
+			position: absolute; left: 50%; bottom: 25px; transform: translateX(-50%); display: flex; gap: 18px;
+			padding: 10px 14px; border: 1px solid var(--line); background: var(--panel); backdrop-filter: blur(12px);
+			font: 10px "DM Mono", monospace; color: #e4e3dd; white-space: nowrap;
+		}
+		.key { display: inline-grid; min-width: 19px; height: 19px; padding: 0 4px; place-items: center; margin-right: 5px; border: 1px solid rgba(255,255,255,.28); color: white; }
+		.arena-prompt { position: absolute; left: 50%; bottom: 72px; transform: translateX(-50%); padding: 9px 14px; border: 1px solid rgba(213,242,122,.7); background: rgba(16,22,20,.88); color: #f5f4ef; font: 11px "DM Mono", monospace; white-space: nowrap; }
+		.arena-prompt.hidden, .match-countdown.hidden { display: none; }
+		.match-countdown { position: fixed; inset: 0; z-index: 3; display: grid; place-items: center; pointer-events: none; color: #ff3434; font: 700 clamp(96px, 24vw, 220px)/1 Manrope, sans-serif; text-shadow: 0 0 8px #fff, 0 0 20px #ff1010, 0 0 48px #e00000, 0 0 90px #bd0000; animation: countdown-pulse .8s ease-in-out infinite alternate; }
+		.match-countdown.go { font-size: clamp(72px, 17vw, 150px); }
+		.match-result { position: fixed; inset: 0; z-index: 4; display: grid; place-items: center; pointer-events: none; font: 700 clamp(56px, 13vw, 112px)/1 Manrope, sans-serif; text-align: center; text-shadow: 0 0 8px #fff, 0 0 22px currentColor, 0 0 58px currentColor; }
+		.match-result.hidden { display: none; }
+		.match-result.died { color: #ff3434; }
+		.match-result.won { color: #d5f27a; }
+		@keyframes countdown-pulse { from { opacity: .78; transform: scale(.96); } to { opacity: 1; transform: scale(1.04); } }
+		.prompt {
+			position: absolute; inset: 0; display: grid; place-items: center; background: rgba(23, 31, 31, .2);
+			pointer-events: auto; transition: opacity .25s, visibility .25s;
+		}
+		.prompt.hidden { opacity: 0; visibility: hidden; }
+		.prompt { background: rgba(12, 7, 22, .42); }
+		.prompt-box {
+			position: relative; width: min(510px, calc(100% - 36px)); padding: 35px 38px 25px; text-align: center;
+			max-height: calc(100dvh - 24px); overflow-y: auto;
+			background: linear-gradient(145deg, rgba(25, 13, 36, .97), rgba(39, 17, 50, .96));
+			border: 1px solid rgba(255, 91, 210, .78);
+			box-shadow: 0 0 0 5px rgba(145, 68, 226, .2), 0 0 24px rgba(255, 55, 193, .32), 0 0 70px rgba(125, 57, 230, .3), 0 20px 70px rgba(0,0,0,.32);
+			backdrop-filter: blur(14px);
+		}
+		.prompt-box::before {
+			position: absolute; content: ""; inset: 8px; border: 1px dotted rgba(255, 150, 229, .7);
+			pointer-events: none; box-shadow: inset 0 0 18px rgba(255, 64, 205, .08);
+		}
+		.eyebrow { position: relative; margin: 0 0 9px; color: #e9a9ff; font: 10px "DM Mono", monospace; text-transform: uppercase; }
+		h1.marquee { position: relative; margin: 0 0 22px; font-size: clamp(56px, 11vw, 86px); line-height: 1.12; font-weight: 700; letter-spacing: 0; animation: neon-flicker 4s infinite; }
+		.marquee-pink { color: #ff70d5; text-shadow: 0 0 5px #fff, 0 0 12px #ff42c8, 0 0 28px #ff2ac0, 0 0 54px #ff2ac0; }
+		.marquee-purple { color: #c9a0ff; text-shadow: 0 0 5px #fff, 0 0 12px #b66aff, 0 0 28px #9945ff, 0 0 54px #9945ff; }
+		@keyframes neon-flicker { 0%, 18%, 20%, 22%, 65%, 68%, 100% { opacity: 1; } 19%, 67% { opacity: .82; } }
+		.prompt-copy { margin: 0 0 19px; color: #d7c9df; font-size: 12px; line-height: 1.6; }
+		button { appearance: none; position: relative; width: 100%; border: 1px solid rgba(255,255,255,.46); padding: 12px 14px; color: white; background: linear-gradient(100deg, #e83cae, #9450e8); box-shadow: 0 0 18px rgba(225, 57, 194, .3); font: 700 11px Manrope, sans-serif; cursor: pointer; transition: filter .15s, box-shadow .15s; }
+		button:hover { filter: brightness(1.18); box-shadow: 0 0 26px rgba(225, 57, 194, .55); }
+		button:disabled { cursor: not-allowed; filter: grayscale(.65); opacity: .55; }
+		.punch-button { position: absolute; right: 28px; bottom: 74px; width: 94px; min-height: 46px; padding: 10px; border: 1px solid rgba(255,100,100,.8); color: white; background: rgba(112,24,26,.9); box-shadow: 0 0 18px rgba(255,45,45,.26); pointer-events: auto; }
+		.punch-button span { margin-left: 5px; color: #ffb3b3; font: 9px "DM Mono", monospace; }
+		.punch-button:disabled { opacity: .45; }
+		.kick-button { position: absolute; right: 134px; bottom: 74px; width: 106px; min-height: 46px; padding: 8px; border: 1px solid rgba(255,180,75,.8); color: white; background: rgba(113,66,18,.92); box-shadow: 0 0 18px rgba(255,160,35,.24); pointer-events: auto; }
+		.kick-button span, .kick-button small { color: #ffd49a; font: 9px "DM Mono", monospace; }
+		.kick-button small { display: block; margin-top: 2px; }
+		.kick-button:disabled { opacity: .45; }
+		.room-controls { position: relative; margin: 0 0 14px; padding-top: 14px; border-top: 1px solid rgba(255,255,255,.2); }
+		.room-label { margin: 0 0 9px; color: #e9a9ff; font: 10px "DM Mono", monospace; }
+		.username-input { min-width: 0; width: 100%; margin-bottom: 8px; border: 1px solid rgba(255,255,255,.35); padding: 11px 10px; color: white; background: rgba(0,0,0,.24); font: 12px "DM Mono", monospace; }
+		.room-create, .room-join { display: grid; gap: 8px; }
+		.room-create { grid-template-columns: 1fr; margin-bottom: 8px; }
+		.room-join { grid-template-columns: minmax(0, 1fr) auto; }
+		.room-create button, .room-join button { width: auto; white-space: nowrap; }
+		.room-code { min-width: 112px; align-self: stretch; display: grid; place-items: center; padding: 0 10px; border: 1px solid rgba(255,255,255,.28); color: var(--lime); font: 500 13px "DM Mono", monospace; user-select: all; }
+		.room-code:empty { visibility: hidden; }
+		.room-input { min-width: 0; width: 100%; border: 1px solid rgba(255,255,255,.35); padding: 0 10px; color: white; background: rgba(0,0,0,.24); font: 12px "DM Mono", monospace; text-transform: uppercase; }
+		.room-status { min-height: 28px; margin: 8px 0 0; color: #d7c9df; font: 9px/1.5 "DM Mono", monospace; }
+		.prompt-note { position: relative; margin: 12px 0 0; color: #c4a9d2; text-align: center; font: 9px "DM Mono", monospace; }
+		@media (prefers-reduced-motion: reduce) { h1.marquee { animation: none; } }
+
+		@media (max-width: 600px) {
+			.fps-counter { top: 43px; left: 16px; }
+			.arena-timer { top: 61px; left: 16px; }
+			.coordinates { left: 16px; bottom: 17px; }
+			.punch-button { right: 16px; bottom: 60px; width: 82px; min-height: 42px; }
+			.kick-button { right: 106px; bottom: 60px; width: 96px; min-height: 42px; }
+			.help { bottom: 13px; gap: 10px; padding: 8px 9px; font-size: 9px; }
+			.key { min-width: 17px; height: 17px; margin-right: 3px; }
+		}
+	</style>
+</head>
+<body>
+	<div class="hud" aria-hidden="true">
+		<div class="fps-counter" id="fps-counter">FPS: --</div>
+		<div class="arena-timer hidden" id="arena-timer"></div>
+		<div class="coordinates">POSITION <span id="position">X 00.0 · Z 00.0</span></div>
+		<div class="crosshair"></div>
+		<div class="arena-prompt hidden" id="arena-prompt"><i class="key">E</i> PRESS E TO GET IN</div>
+		<div class="help"><span><i class="key">W</i><i class="key">A</i><i class="key">S</i><i class="key">D</i> MOVE</span><span><i class="key">SHIFT</i> SPRINT</span><span><i class="key">MOUSE</i> LOOK</span></div>
+	</div>
+	<div class="match-countdown hidden" id="match-countdown" aria-live="assertive"></div>
+	<div class="match-result hidden" id="match-result" role="status"></div>
+	<button class="punch-button" id="punch-button" type="button" disabled>PUNCH <span>F</span></button>
+	<button class="kick-button" id="kick-button" type="button" disabled>KICK <span>K</span><small id="kick-status">0/5 HITS</small></button>
+	<div class="prompt" id="prompt">
+		<div class="prompt-box">
+			<p class="eyebrow">Welcome to the field</p>
+			<h1 class="marquee"><span class="marquee-pink">beat your</span><span class="marquee-purple"> bros</span></h1>
+			<section class="room-controls" aria-label="Room code">
+				<p class="room-label">USERNAME AND ROOM CODE</p>
+				<input class="username-input" id="username-input" type="text" maxlength="20" placeholder="YOUR USERNAME" aria-label="Your username" autocomplete="nickname">
+				<div class="room-create"><button id="create-room" type="button">CREATE ROOM</button><output class="room-code" id="created-code" aria-label="Created room code"></output></div>
+				<form class="room-join" id="join-room"><input class="room-input" id="room-input" type="text" maxlength="6" pattern="[A-HJ-NP-Z2-9]{6}" placeholder="ENTER CODE" aria-label="Enter room code" autocomplete="off"><button id="join-room-button" type="submit">JOIN ROOM</button></form>
+				<p class="room-status" id="room-status" role="status">Connect to the game server to create or join a room.</p>
+			</section>
+			<button id="enter" disabled>ENTER FIELD</button>
+			<p class="prompt-note">WASD TO MOVE · MOUSE TO LOOK · ESC TO RELEASE</p>
+		</div>
+	</div>
+
+	<script type="module">
+		import * as THREE from 'https://cdn.jsdelivr.net/npm/three@0.170.0/build/three.module.js';
+
+		const scene = new THREE.Scene();
+		scene.background = new THREE.Color(0xbac7c4);
+		scene.fog = new THREE.Fog(0xbac7c4, 44, 105);
+
+		const renderer = new THREE.WebGLRenderer({ antialias: true, powerPreference: 'high-performance' });
+		renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+		renderer.setSize(window.innerWidth, window.innerHeight);
+		renderer.shadowMap.enabled = true;
+		renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+		renderer.toneMapping = THREE.ACESFilmicToneMapping;
+		renderer.toneMappingExposure = 1.15;
+		document.body.appendChild(renderer.domElement);
+
+		const camera = new THREE.PerspectiveCamera(72, window.innerWidth / window.innerHeight, 0.1, 150);
+		const hemi = new THREE.HemisphereLight(0xf0f4ec, 0x747b77, 2.1);
+		scene.add(hemi);
+		const sun = new THREE.DirectionalLight(0xfff1d8, 3.1);
+		sun.position.set(-18, 32, -12);
+		sun.castShadow = true;
+		sun.shadow.mapSize.set(2048, 2048);
+		sun.shadow.camera.left = -30;
+		sun.shadow.camera.right = 30;
+		sun.shadow.camera.top = 30;
+		sun.shadow.camera.bottom = -30;
+		sun.shadow.normalBias = 0.03;
+		scene.add(sun);
+
+		const textureCanvas = document.createElement('canvas');
+		textureCanvas.width = 512;
+		textureCanvas.height = 512;
+		const textureContext = textureCanvas.getContext('2d');
+		textureContext.fillStyle = '#929894';
+		textureContext.fillRect(0, 0, 512, 512);
+		for (let i = 0; i < 23000; i++) {
+			const shade = Math.floor(95 + Math.random() * 75);
+			textureContext.fillStyle = `rgba(${shade},${shade + 3},${shade},${Math.random() * 0.14})`;
+			const size = Math.random() * 2.4 + 0.4;
+			textureContext.fillRect(Math.random() * 512, Math.random() * 512, size, size);
+		}
+		const concreteTexture = new THREE.CanvasTexture(textureCanvas);
+		concreteTexture.wrapS = THREE.RepeatWrapping;
+		concreteTexture.wrapT = THREE.RepeatWrapping;
+		concreteTexture.repeat.set(7, 7);
+		concreteTexture.colorSpace = THREE.SRGBColorSpace;
+		concreteTexture.anisotropy = renderer.capabilities.getMaxAnisotropy();
+
+		const slab = new THREE.Mesh(
+			new THREE.BoxGeometry(50, 0.5, 50),
+			new THREE.MeshStandardMaterial({ map: concreteTexture, roughness: 0.92, color: 0xd4d8d2 })
+		);
+		slab.position.y = -0.25;
+		slab.receiveShadow = true;
+		scene.add(slab);
+
+		const ground = new THREE.Mesh(
+			new THREE.PlaneGeometry(2000, 2000),
+			new THREE.MeshStandardMaterial({ color: 0x929f9b, roughness: 1 })
+		);
+		ground.rotation.x = -Math.PI / 2;
+		ground.position.y = -0.52;
+		ground.receiveShadow = true;
+		scene.add(ground);
+
+		const seamMaterial = new THREE.MeshBasicMaterial({ color: 0x747c78, transparent: true, opacity: 0.48 });
+		for (let coordinate = -20; coordinate <= 20; coordinate += 5) {
+			const xSeam = new THREE.Mesh(new THREE.BoxGeometry(0.035, 0.006, 50), seamMaterial);
+			xSeam.position.set(coordinate, 0.004, 0);
+			scene.add(xSeam);
+			const zSeam = new THREE.Mesh(new THREE.BoxGeometry(50, 0.006, 0.035), seamMaterial);
+			zSeam.position.set(0, 0.004, coordinate);
+			scene.add(zSeam);
+		}
+
+		const edgeMaterial = new THREE.MeshStandardMaterial({ color: 0xd5f27a, roughness: 0.8 });
+		const edgeLines = [
+			[0, 0.012, -24.93, 50, 0.025, 0.08], [0, 0.012, 24.93, 50, 0.025, 0.08],
+			[-24.93, 0.012, 0, 0.08, 0.025, 50], [24.93, 0.012, 0, 0.08, 0.025, 50]
+		];
+		for (const [x, y, z, width, height, depth] of edgeLines) {
+			const line = new THREE.Mesh(new THREE.BoxGeometry(width, height, depth), edgeMaterial);
+			line.position.set(x, y, z);
+			scene.add(line);
+		}
+		const lobbyFill = new THREE.Mesh(
+			new THREE.CircleGeometry(2.5, 64),
+			new THREE.MeshBasicMaterial({ color: 0x29372f, transparent: true, opacity: 0.62, side: THREE.DoubleSide })
+		);
+		lobbyFill.rotation.x = -Math.PI / 2;
+		lobbyFill.position.y = 0.008;
+		scene.add(lobbyFill);
+		const lobbyRing = new THREE.Mesh(
+			new THREE.TorusGeometry(2.5, 0.085, 12, 64),
+			new THREE.MeshStandardMaterial({ color: 0xd5f27a, emissive: 0x718f29, emissiveIntensity: 0.8, roughness: 0.45 })
+		);
+		lobbyRing.rotation.x = Math.PI / 2;
+		lobbyRing.position.y = 0.07;
+		scene.add(lobbyRing);
+		const queueLabel = createQueueLabel();
+		scene.add(queueLabel.sprite);
+		const arenaPlatform = new THREE.Mesh(
+			new THREE.CylinderGeometry(5, 5, 0.4, 64),
+			new THREE.MeshStandardMaterial({ color: 0x3d4742, roughness: 0.72, metalness: 0.08 })
+		);
+		arenaPlatform.position.y = 6.55;
+		arenaPlatform.receiveShadow = true;
+		arenaPlatform.castShadow = true;
+		arenaPlatform.visible = false;
+		scene.add(arenaPlatform);
+		const arenaRim = new THREE.Mesh(
+			new THREE.TorusGeometry(4.94, 0.11, 14, 64),
+			new THREE.MeshStandardMaterial({ color: 0xff4d4d, emissive: 0x9f1111, emissiveIntensity: 0.7, roughness: 0.4 })
+		);
+		arenaRim.rotation.x = Math.PI / 2;
+		arenaRim.position.y = 6.77;
+		arenaRim.visible = false;
+		scene.add(arenaRim);
+
+		const actor = new THREE.Group();
+		const worldUp = new THREE.Vector3(0, 1, 0);
+		const ragdollAxis = new THREE.Vector3(0, 0, 1);
+		const targetFacingQuaternion = new THREE.Quaternion();
+		const ragdollQuaternion = new THREE.Quaternion();
+		const TURN_SMOOTHING = 18;
+		const shirt = new THREE.MeshStandardMaterial({ color: 0x377078, roughness: 0.82 });
+		const trousers = new THREE.MeshStandardMaterial({ color: 0x303943, roughness: 0.88 });
+		const skin = new THREE.MeshStandardMaterial({ color: 0xc99773, roughness: 0.88 });
+		const shoes = new THREE.MeshStandardMaterial({ color: 0x25292b, roughness: 0.92 });
+		const walkRig = { arms: [], legs: [] };
+		const torso = new THREE.Mesh(new THREE.CapsuleGeometry(0.25, 0.48, 5, 12), shirt);
+		torso.position.y = 1.16;
+		torso.castShadow = true;
+		actor.add(torso);
+		const hips = new THREE.Mesh(new THREE.BoxGeometry(0.36, 0.2, 0.24), trousers);
+		hips.position.y = 0.72;
+		hips.castShadow = true;
+		actor.add(hips);
+		const neck = new THREE.Mesh(new THREE.CylinderGeometry(0.075, 0.085, 0.14, 12), skin);
+		neck.position.y = 1.65;
+		neck.castShadow = true;
+		actor.add(neck);
+		const head = new THREE.Mesh(new THREE.SphereGeometry(0.18, 18, 14), skin);
+		head.position.y = 1.84;
+		head.castShadow = true;
+		actor.add(head);
+		const localNameplate = createNameplate('', 100);
+		actor.add(localNameplate);
+
+		for (const side of [-1, 1]) {
+			const phaseOffset = side === -1 ? 0 : Math.PI;
+			const sideName = side === -1 ? 'left' : 'right';
+			const leg = new THREE.Group();
+			leg.name = `${sideName}-leg`;
+			leg.position.set(side * 0.13, 0.76, 0);
+			actor.add(leg);
+			const thigh = new THREE.Mesh(new THREE.CapsuleGeometry(0.095, 0.28, 4, 10), trousers);
+			thigh.position.y = -0.18;
+			thigh.castShadow = true;
+			leg.add(thigh);
+			const knee = new THREE.Group();
+			knee.name = `${sideName}-knee`;
+			knee.position.y = -0.37;
+			leg.add(knee);
+			const shin = new THREE.Mesh(new THREE.CapsuleGeometry(0.075, 0.25, 4, 10), trousers);
+			shin.position.y = -0.17;
+			shin.castShadow = true;
+			knee.add(shin);
+			const foot = new THREE.Mesh(new THREE.BoxGeometry(0.15, 0.1, 0.27), shoes);
+			foot.position.set(0, -0.32, -0.055);
+			foot.castShadow = true;
+			knee.add(foot);
+			walkRig.legs.push({ pivot: leg, knee, phaseOffset });
+
+			const arm = new THREE.Group();
+			arm.name = `${sideName}-arm`;
+			arm.position.set(side * 0.29, 1.43, 0);
+			actor.add(arm);
+			const shoulder = new THREE.Mesh(new THREE.SphereGeometry(0.095, 12, 10), shirt);
+			shoulder.castShadow = true;
+			arm.add(shoulder);
+			const upperArm = new THREE.Mesh(new THREE.CapsuleGeometry(0.075, 0.25, 4, 10), shirt);
+			upperArm.position.y = -0.15;
+			upperArm.castShadow = true;
+			arm.add(upperArm);
+			const elbow = new THREE.Group();
+			elbow.name = `${sideName}-elbow`;
+			elbow.position.y = -0.31;
+			arm.add(elbow);
+			const forearm = new THREE.Mesh(new THREE.CapsuleGeometry(0.065, 0.23, 4, 10), skin);
+			forearm.position.y = -0.15;
+			forearm.castShadow = true;
+			elbow.add(forearm);
+			const hand = new THREE.Mesh(new THREE.SphereGeometry(0.07, 10, 8), skin);
+			hand.position.y = -0.31;
+			hand.castShadow = true;
+			elbow.add(hand);
+			walkRig.arms.push({ side: sideName, pivot: arm, elbow, phaseOffset: phaseOffset + Math.PI });
+		}
+		actor.position.set(0, 0, 0);
+		actor.visible = true;
+		scene.add(actor);
+		const localCharacter = { group: actor, walkRig, walkTime: 0, previousWalkTime: 0, moving: false, baseY: 0, ragdolled: false, punchSequence: 0, punchStartedAt: 0, punchPredictionPending: false, kickSequence: 0, kickStartedAt: 0, kickPredictionPending: false };
+
+		const player = new THREE.Vector3(0, 0, 0);
+		const previousPlayer = new THREE.Vector3(0, 0, 0);
+		const visualCorrection = new THREE.Vector3(0, 0, 0);
+		const lastRenderedPlayer = new THREE.Vector3(0, 0, 0);
+		const keys = new Set();
+		const FIXED_STEP = 1 / 60;
+		const CONTROL_INTERVAL = 0.05;
+		const CORRECTION_DECAY = 16;
+		const MAX_FRAME_DELTA = 0.1;
+		let accumulator = 0;
+		let previousFrameTime = null;
+		let yaw = 0;
+		let playerFacingYaw = 0;
+		let pitch = 0;
+		let locked = false;
+		let sprinting = false;
+		const sprintKeys = new Set();
+		const prompt = document.getElementById('prompt');
+		const enterButton = document.getElementById('enter');
+		const createRoomButton = document.getElementById('create-room');
+		const joinRoomButton = document.getElementById('join-room-button');
+		const createdCode = document.getElementById('created-code');
+		const joinRoomForm = document.getElementById('join-room');
+		const roomCodeInput = document.getElementById('room-input');
+		const usernameInput = document.getElementById('username-input');
+		const roomStatus = document.getElementById('room-status');
+		const fpsLabel = document.getElementById('fps-counter');
+		const arenaTimer = document.getElementById('arena-timer');
+		const arenaPrompt = document.getElementById('arena-prompt');
+		const matchCountdown = document.getElementById('match-countdown');
+		const matchResult = document.getElementById('match-result');
+		const punchButton = document.getElementById('punch-button');
+		const kickButton = document.getElementById('kick-button');
+		const kickStatus = document.getElementById('kick-status');
+		const positionLabel = document.getElementById('position');
+		let socket = null;
+		let socketPromise = null;
+		let hmacKey = null;
+		let inboundPacketSequence = 0;
+		let outboundPacketSequence = 0;
+		let outboundPacketQueue = Promise.resolve();
+		let playerId = null;
+		let activeRoomCode = null;
+		let roomRequestPending = false;
+		let localMoving = false;
+		let localHealth = 100;
+		let localKickCharges = 0;
+		let localHitsLanded = 0;
+		let localRagdolled = false;
+		let localInQueue = false;
+		let localInMatch = false;
+		let activeArenaRadius = 23;
+		let lavaEnabled = false;
+		let matchPhase = 'waiting';
+		let queueRequestPending = false;
+		let pendingArenaQueueState = null;
+		let canEnterArena = false;
+		let nextInputSequence = 0;
+		let lastAcknowledgedInputSequence = 0;
+		let hasServerPosition = false;
+		let pendingInputs = [];
+		let fpsFrameCount = 0;
+		let fpsLastUpdate = 0;
+		const remoteCharacters = new Map();
+
+		function enterPointerLock() {
+			if (!playerId) return;
+			renderer.domElement.requestPointerLock();
+		}
+		enterButton.addEventListener('click', enterPointerLock);
+
+		function setRoomRequestPending(pending) {
+			roomRequestPending = pending;
+			createRoomButton.disabled = pending || Boolean(playerId);
+			joinRoomButton.disabled = pending || Boolean(playerId);
+		}
+
+		function connectToServer() {
+			if (socket?.readyState === WebSocket.OPEN) return Promise.resolve(socket);
+			if (socket?.readyState === WebSocket.CONNECTING && socketPromise) return socketPromise;
+			if (location.protocol === 'file:') return Promise.reject(new Error('Start the server and open http://localhost:3000, or use your deployed Render URL.'));
+
+			const protocol = location.protocol === 'https:' ? 'wss:' : 'ws:';
+			socket = new WebSocket(`${protocol}//${location.host}/multiplayer`);
+			const currentSocket = socket;
+			let connectionOpen = false;
+			let sessionReady = false;
+			let resolveConnection;
+			let rejectConnection;
+			socketPromise = new Promise((resolve, reject) => {
+				resolveConnection = resolve;
+				rejectConnection = reject;
+			});
+			currentSocket.addEventListener('open', () => {
+				connectionOpen = true;
+				if (sessionReady) resolveConnection(currentSocket);
+			}, { once: true });
+			currentSocket.addEventListener('error', () => rejectConnection(new Error('Could not connect to the game server.')), { once: true });
+			currentSocket.addEventListener('message', (event) => {
+				void handleServerPacket(event, currentSocket, () => {
+					sessionReady = true;
+					if (connectionOpen) resolveConnection(currentSocket);
+				}, rejectConnection);
+			});
+			currentSocket.addEventListener('close', () => {
+				if (socket !== currentSocket) return;
+				socket = null;
+				socketPromise = null;
+				hmacKey = null;
+				inboundPacketSequence = 0;
+				outboundPacketSequence = 0;
+				outboundPacketQueue = Promise.resolve();
+				playerId = null;
+				activeRoomCode = null;
+				keys.clear();
+				sprintKeys.clear();
+				sprinting = false;
+				hasServerPosition = false;
+				pendingInputs = [];
+				localMoving = false;
+				localHealth = 100;
+				localKickCharges = 0;
+				localHitsLanded = 0;
+				localRagdolled = false;
+				localInQueue = false;
+				localInMatch = false;
+				matchPhase = 'waiting';
+				queueRequestPending = false;
+				pendingArenaQueueState = null;
+				arenaPrompt.classList.add('hidden');
+				matchCountdown.classList.add('hidden');
+				matchResult.classList.add('hidden');
+				punchButton.disabled = true;
+				kickButton.disabled = true;
+				usernameInput.disabled = false;
+				enterButton.disabled = true;
+				setRoomRequestPending(false);
+				removeRemoteCharacters();
+				roomStatus.textContent = 'Server connection lost. Reconnect to play.';
+				if (document.pointerLockElement) document.exitPointerLock();
+			});
+			return socketPromise;
+		}
+
+		function decodeBase64(value) {
+			return Uint8Array.from(atob(value), (character) => character.charCodeAt(0));
+		}
+
+		async function handleServerPacket(event, connection, onSessionReady, rejectConnection) {
+			let packet;
+			try {
+				packet = JSON.parse(event.data);
+			} catch {
+				connection.close(1008, 'Invalid server packet.');
+				return;
+			}
+			if (packet.type === 'session') {
+				try {
+					hmacKey = await crypto.subtle.importKey('raw', decodeBase64(packet.key), { name: 'HMAC', hash: 'SHA-256' }, false, ['sign', 'verify']);
+					inboundPacketSequence = 0;
+					outboundPacketSequence = 0;
+					outboundPacketQueue = Promise.resolve();
+					onSessionReady();
+				} catch {
+					rejectConnection(new Error('This browser cannot establish an authenticated game connection.'));
+					connection.close(1008, 'HMAC unavailable.');
+				}
+				return;
+			}
+			if (packet.type !== 'signed' || !hmacKey || !Number.isSafeInteger(packet.sequence) || packet.sequence <= inboundPacketSequence || typeof packet.body !== 'string' || typeof packet.signature !== 'string') {
+				connection.close(1008, 'Invalid signed server packet.');
+				return;
+			}
+			try {
+				const valid = await crypto.subtle.verify(
+					'HMAC',
+					hmacKey,
+					decodeBase64(packet.signature),
+					new TextEncoder().encode(`${packet.sequence}\n${packet.body}`)
+				);
+				if (!valid) {
+					connection.close(1008, 'Server message authentication failed.');
+					return;
+				}
+				inboundPacketSequence = packet.sequence;
+				handleServerMessage({ data: packet.body });
+			} catch {
+				connection.close(1008, 'Server message authentication failed.');
+			}
+		}
+
+		function sendSignedMessage(message) {
+			const connection = socket;
+			const signingKey = hmacKey;
+			if (!connection || connection.readyState !== WebSocket.OPEN || !signingKey) return Promise.resolve(false);
+			const sequence = ++outboundPacketSequence;
+			const body = JSON.stringify(message);
+			outboundPacketQueue = outboundPacketQueue.then(async () => {
+				const signature = await crypto.subtle.sign('HMAC', signingKey, new TextEncoder().encode(`${sequence}\n${body}`));
+				if (connection !== socket || connection.readyState !== WebSocket.OPEN) return false;
+				const signatureBase64 = btoa(String.fromCharCode(...new Uint8Array(signature)));
+				connection.send(JSON.stringify({ type: 'signed', sequence, body, signature: signatureBase64 }));
+				return true;
+			});
+			return outboundPacketQueue;
+		}
+
+		async function requestRoom(type, code = '') {
+			if (roomRequestPending || playerId) return;
+			const username = usernameInput.value.trim();
+			if (!username || Array.from(username).length > 20) {
+				roomStatus.textContent = 'Enter a username from 1 to 20 characters.';
+				usernameInput.focus();
+				return;
+			}
+			if (type === 'join' && !/^[A-HJ-NP-Z2-9]{6}$/.test(code)) {
+				roomStatus.textContent = 'Enter a valid 6-character room code.';
+				roomCodeInput.focus();
+				return;
+			}
+
+			setRoomRequestPending(true);
+			roomStatus.textContent = 'Connecting to the game server…';
+			try {
+				await connectToServer();
+				await sendSignedMessage({ type, username, code });
+			} catch (error) {
+				setRoomRequestPending(false);
+				roomStatus.textContent = error.message;
+			}
+		}
+
+		function handleServerMessage(event) {
+			let message;
+			try {
+				message = JSON.parse(event.data);
+			} catch {
+				roomStatus.textContent = 'Received an invalid response from the server.';
+				return;
+			}
+			if (message.type === 'error') {
+				setRoomRequestPending(false);
+				roomStatus.textContent = message.message;
+				queueRequestPending = false;
+				pendingArenaQueueState = null;
+				if (canEnterArena) {
+					arenaPrompt.textContent = message.message;
+					arenaPrompt.classList.remove('hidden');
+				}
+				return;
+			}
+			if (message.type === 'joined') {
+				playerId = message.playerId;
+				activeRoomCode = message.code;
+				nextInputSequence = 0;
+				lastAcknowledgedInputSequence = 0;
+				hasServerPosition = false;
+				pendingInputs = [];
+				sprintKeys.clear();
+				sprinting = false;
+				createdCode.textContent = message.code;
+				roomCodeInput.value = message.code;
+				roomStatus.textContent = `Joined room ${message.code} as ${message.username}. Share the code with friends.`;
+				enterButton.disabled = false;
+				punchButton.disabled = true;
+				kickButton.disabled = true;
+				setRoomRequestPending(false);
+				usernameInput.disabled = true;
+				return;
+			}
+			if (message.type === 'state' && message.code === activeRoomCode) {
+				applyRoomState(message.players);
+				if (message.arena) updateArenaState(message.arena);
+			}
+		}
+
+		function updateArenaState(arena) {
+			queueLabel.setCount(arena.queueCount);
+			activeArenaRadius = Number.isFinite(arena.radius) ? THREE.MathUtils.clamp(arena.radius, 5, 23) : 23;
+			const platformScale = activeArenaRadius / 5;
+			arenaPlatform.scale.set(platformScale, 1, platformScale);
+			arenaRim.scale.set(platformScale, 1, platformScale);
+			localInQueue = arena.queuedPlayerIds.includes(playerId);
+			localInMatch = arena.matchPlayerIds.includes(playerId);
+			matchPhase = arena.phase;
+			setLava(matchPhase === 'active');
+			if (queueRequestPending && localInQueue === pendingArenaQueueState) {
+				queueRequestPending = false;
+				pendingArenaQueueState = null;
+			}
+			const shouldFreeze = localInQueue && !(localInMatch && matchPhase === 'active');
+			if (shouldFreeze && (keys.size > 0 || sprinting)) {
+				keys.clear();
+				sprintKeys.clear();
+				sprinting = false;
+				localMoving = false;
+				sendControl();
+			}
+			arenaPlatform.visible = arena.queueCount === 2;
+			arenaRim.visible = arena.queueCount === 2;
+			if (Number.isFinite(arena.nextShrinkIn)) {
+				const minutes = Math.floor(arena.nextShrinkIn / 60).toString().padStart(2, '0');
+				const seconds = (arena.nextShrinkIn % 60).toString().padStart(2, '0');
+				arenaTimer.textContent = `ARENA SHRINKS IN ${minutes}:${seconds}`;
+				arenaTimer.classList.remove('hidden');
+			} else {
+				arenaTimer.classList.add('hidden');
+			}
+			const showCountdown = arena.phase === 'countdown' || arena.phase === 'go';
+			matchCountdown.textContent = showCountdown ? String(arena.countdown) : '';
+			matchCountdown.classList.toggle('hidden', !showCountdown);
+			matchCountdown.classList.toggle('go', arena.phase === 'go');
+			const matchFinished = arena.phase === 'finished';
+			matchResult.textContent = matchFinished ? (arena.winnerId === playerId ? 'YOU WIN!' : 'YOU DIED!') : '';
+			matchResult.classList.toggle('hidden', !matchFinished);
+			matchResult.classList.toggle('died', matchFinished && arena.winnerId !== playerId);
+			matchResult.classList.toggle('won', matchFinished && arena.winnerId === playerId);
+			punchButton.disabled = !localInMatch || matchPhase !== 'active' || localHealth <= 0;
+			kickButton.disabled = !localInMatch || matchPhase !== 'active' || localHealth <= 0 || localKickCharges <= 0;
+			updateArenaPrompt();
+		}
+
+		function setLava(enabled) {
+			if (lavaEnabled === enabled) return;
+			lavaEnabled = enabled;
+			ground.material.color.setHex(enabled ? 0xff4a00 : 0x929f9b);
+			ground.material.emissive.setHex(enabled ? 0x9f2600 : 0x000000);
+			ground.material.emissiveIntensity = enabled ? 0.7 : 0;
+			slab.material.color.setHex(enabled ? 0xff7130 : 0xd4d8d2);
+			slab.material.emissive.setHex(enabled ? 0x8f2600 : 0x000000);
+			slab.material.emissiveIntensity = enabled ? 0.4 : 0;
+		}
+
+		function requestPunch() {
+			if (!playerId || !localInMatch || matchPhase !== 'active' || localHealth <= 0 || socket?.readyState !== WebSocket.OPEN) return;
+			localCharacter.punchStartedAt = performance.now();
+			localCharacter.punchPredictionPending = true;
+			void sendSignedMessage({ type: 'punch' });
+		}
+
+		function requestKick() {
+			if (!playerId || !localInMatch || matchPhase !== 'active' || localHealth <= 0 || localKickCharges <= 0 || socket?.readyState !== WebSocket.OPEN) return;
+			localCharacter.kickStartedAt = performance.now();
+			localCharacter.kickPredictionPending = true;
+			void sendSignedMessage({ type: 'kick' });
+		}
+
+		punchButton.addEventListener('click', requestPunch);
+		kickButton.addEventListener('click', requestKick);
+
+		function updateArenaPrompt() {
+			canEnterArena = Boolean(playerId) && !localInQueue && matchPhase === 'waiting' && Math.hypot(player.x, player.z) <= 4;
+			if (localInQueue) {
+				arenaPrompt.innerHTML = queueRequestPending ? 'UPDATING RING…' : '<i class="key">E</i> PRESS E TO EXIT RING';
+				arenaPrompt.classList.remove('hidden');
+				return;
+			}
+			if (canEnterArena || queueRequestPending) {
+				arenaPrompt.innerHTML = queueRequestPending ? 'ENTERING RING…' : '<i class="key">E</i> PRESS E TO GET IN';
+				arenaPrompt.classList.remove('hidden');
+				return;
+			}
+			arenaPrompt.classList.add('hidden');
+		}
+
+		createRoomButton.addEventListener('click', () => requestRoom('create'));
+		roomCodeInput.addEventListener('input', () => {
+			roomCodeInput.value = roomCodeInput.value.toUpperCase().replace(/[^A-HJ-NP-Z2-9]/g, '').slice(0, 6);
+		});
+		joinRoomForm.addEventListener('submit', (event) => {
+			event.preventDefault();
+			requestRoom('join', roomCodeInput.value.trim().toUpperCase());
+		});
+		function sendControl() {
+			if (!playerId || socket?.readyState !== WebSocket.OPEN) return;
+			const input = {
+				sequence: ++nextInputSequence,
+				keys: Array.from(keys),
+				sprinting,
+				yaw,
+				sentAt: performance.now()
+			};
+			pendingInputs.push(input);
+			void sendSignedMessage({ type: 'control', sequence: input.sequence, keys: input.keys, sprinting: input.sprinting, yaw: input.yaw });
+		}
+		setInterval(() => {
+			sendControl();
+		}, 50);
+		renderer.domElement.addEventListener('click', () => {
+			if (!locked) enterPointerLock();
+		});
+		document.addEventListener('pointerlockchange', () => {
+			locked = document.pointerLockElement === renderer.domElement;
+			document.body.classList.toggle('locked', locked);
+			prompt.classList.toggle('hidden', locked);
+		});
+		document.addEventListener('mousemove', (event) => {
+			if (!locked) return;
+			yaw -= event.movementX * 0.0022;
+			pitch = THREE.MathUtils.clamp(pitch - event.movementY * 0.0022, -1.35, 1.35);
+		});
+		document.addEventListener('keydown', (event) => {
+			if (event.target instanceof HTMLInputElement) return;
+			if (event.code === 'KeyF') {
+				if (!event.repeat) requestPunch();
+				event.preventDefault();
+				return;
+			}
+			if (event.code === 'KeyK') {
+				if (!event.repeat) requestKick();
+				event.preventDefault();
+				return;
+			}
+			if (event.code === 'KeyE') {
+				if (!event.repeat && (canEnterArena || localInQueue) && !queueRequestPending && socket?.readyState === WebSocket.OPEN) {
+					queueRequestPending = true;
+					pendingArenaQueueState = !localInQueue;
+					updateArenaPrompt();
+					void sendSignedMessage({ type: 'toggleArena' });
+				}
+				event.preventDefault();
+				return;
+			}
+			if (event.code === 'ShiftLeft' || event.code === 'ShiftRight') {
+				if (!playerId) return;
+				event.preventDefault();
+				const wasSprinting = sprintKeys.size > 0;
+				sprintKeys.add(event.code);
+				sprinting = sprintKeys.size > 0;
+				if (!wasSprinting && sprinting) sendControl();
+				return;
+			}
+			if (playerId && ['KeyW', 'KeyA', 'KeyS', 'KeyD'].includes(event.code)) {
+				event.preventDefault();
+				if (!keys.has(event.code)) {
+					keys.add(event.code);
+					localMoving = true;
+					sendControl();
+				}
+			}
+		});
+		document.addEventListener('keyup', (event) => {
+			if (sprintKeys.delete(event.code)) {
+				sprinting = sprintKeys.size > 0;
+				sendControl();
+				return;
+			}
+			if (keys.delete(event.code)) {
+				localMoving = keys.size > 0;
+				sendControl();
+			}
+		});
+		window.addEventListener('blur', () => {
+			const hadInput = keys.size > 0 || sprintKeys.size > 0;
+			keys.clear();
+			sprintKeys.clear();
+			sprinting = false;
+			localMoving = false;
+			if (hadInput) sendControl();
+		});
+
+		function getWalkRig(group) {
+			const legs = [];
+			const arms = [];
+			for (const side of ['left', 'right']) {
+				const phaseOffset = side === 'left' ? 0 : Math.PI;
+				legs.push({ side, pivot: group.getObjectByName(`${side}-leg`), knee: group.getObjectByName(`${side}-knee`), phaseOffset });
+				arms.push({ side, pivot: group.getObjectByName(`${side}-arm`), elbow: group.getObjectByName(`${side}-elbow`), phaseOffset: phaseOffset + Math.PI });
+			}
+			return { legs, arms };
+		}
+
+		function createQueueLabel() {
+			const canvas = document.createElement('canvas');
+			canvas.width = 256;
+			canvas.height = 128;
+			const context = canvas.getContext('2d');
+			const texture = new THREE.CanvasTexture(canvas);
+			texture.colorSpace = THREE.SRGBColorSpace;
+			const sprite = new THREE.Sprite(new THREE.SpriteMaterial({ map: texture, transparent: true, depthTest: false }));
+			sprite.position.set(0, 1.55, 0);
+			sprite.scale.set(1.7, 0.85, 1);
+			return {
+				sprite,
+				count: -1,
+				setCount(count) {
+					const safeCount = THREE.MathUtils.clamp(count, 0, 2);
+					if (this.count === safeCount) return;
+					this.count = safeCount;
+					context.clearRect(0, 0, 256, 128);
+					context.fillStyle = 'rgba(15, 20, 17, .82)';
+					context.fillRect(12, 18, 232, 92);
+					context.strokeStyle = '#d5f27a';
+					context.lineWidth = 5;
+					context.strokeRect(14, 20, 228, 88);
+					context.fillStyle = '#f5f4ef';
+					context.font = '700 62px "DM Mono", monospace';
+					context.textAlign = 'center';
+					context.textBaseline = 'middle';
+					context.fillText(`${safeCount}/2`, 128, 65);
+					texture.needsUpdate = true;
+				}
+			};
+		}
+
+		function createNameplate(username, health) {
+			const canvas = document.createElement('canvas');
+			canvas.width = 512;
+			canvas.height = 128;
+			const context = canvas.getContext('2d');
+			const texture = new THREE.CanvasTexture(canvas);
+			texture.colorSpace = THREE.SRGBColorSpace;
+			const nameplate = new THREE.Sprite(new THREE.SpriteMaterial({ map: texture, transparent: true, depthTest: false }));
+			nameplate.name = 'nameplate';
+			nameplate.position.set(0, 2.48, 0);
+			nameplate.scale.set(2.5, 0.625, 1);
+			nameplate.renderOrder = 10;
+			nameplate.canvasContext = context;
+			nameplate.canvasTexture = texture;
+			nameplate.username = null;
+			nameplate.health = null;
+			updateNameplate(nameplate, username, health);
+			return nameplate;
+		}
+
+		function updateNameplate(nameplate, username, health) {
+			const safeUsername = typeof username === 'string' ? username : 'Player';
+			const safeHealth = Number.isFinite(health) ? THREE.MathUtils.clamp(health, 0, 100) : 100;
+			if (nameplate.username === safeUsername && nameplate.health === safeHealth) return;
+
+			const context = nameplate.canvasContext;
+			context.clearRect(0, 0, 512, 128);
+			context.fillStyle = 'rgba(14, 19, 22, 0.82)';
+			context.fillRect(0, 0, 512, 128);
+			context.fillStyle = '#ffffff';
+			context.font = '600 34px Manrope, sans-serif';
+			context.textAlign = 'center';
+			context.textBaseline = 'middle';
+			context.fillText(safeUsername, 256, 33, 460);
+			context.fillStyle = 'rgba(0, 0, 0, 0.55)';
+			context.fillRect(42, 70, 428, 28);
+			context.fillStyle = safeHealth > 50 ? '#8ee36f' : safeHealth > 20 ? '#f2c14e' : '#ef6262';
+			context.fillRect(46, 74, 420 * safeHealth / 100, 20);
+			context.fillStyle = '#ffffff';
+			context.font = '500 16px "DM Mono", monospace';
+			context.fillText(`${Math.round(safeHealth)}HP`, 256, 84);
+			nameplate.username = safeUsername;
+			nameplate.health = safeHealth;
+			nameplate.canvasTexture.needsUpdate = true;
+		}
+
+		function removeRemoteCharacters() {
+			for (const character of remoteCharacters.values()) scene.remove(character.group);
+			remoteCharacters.clear();
+		}
+
+		function applyMovement(position, inputKeys, directionYaw, delta, isSprinting = false) {
+			if (localInQueue && !(localInMatch && matchPhase === 'active') || localRagdolled || localHealth <= 0) return;
+			const isDown = (key) => inputKeys instanceof Set ? inputKeys.has(key) : inputKeys.includes(key);
+			const forward = Number(isDown('KeyW')) - Number(isDown('KeyS'));
+			const side = Number(isDown('KeyD')) - Number(isDown('KeyA'));
+			const inputLength = Math.hypot(forward, side) || 1;
+			const speed = 7.2 * (isSprinting ? 1.5 : 1) * delta / inputLength;
+			let nextX = position.x + (-Math.sin(directionYaw) * forward + Math.cos(directionYaw) * side) * speed;
+			let nextZ = position.z + (-Math.cos(directionYaw) * forward - Math.sin(directionYaw) * side) * speed;
+			const distance = Math.hypot(nextX, nextZ);
+			if (!localInMatch && !localInQueue && distance < 2.5) {
+				const scale = 2.5 / (distance || 1);
+				nextX *= scale;
+				nextZ *= scale;
+			}
+			position.x = localInMatch ? nextX : THREE.MathUtils.clamp(nextX, -24.1, 24.1);
+			position.z = localInMatch ? nextZ : THREE.MathUtils.clamp(nextZ, -24.1, 24.1);
+		}
+
+		function reconcilePlayer(x, y, z, acknowledgedSequence) {
+			const teleported = hasServerPosition && (Math.abs(x - player.x) > 1 || Math.abs(y - player.y) > 0.25 || Math.abs(z - player.z) > 1);
+			if (!Number.isSafeInteger(acknowledgedSequence) || (hasServerPosition && acknowledgedSequence <= lastAcknowledgedInputSequence && !teleported)) return;
+			lastAcknowledgedInputSequence = acknowledgedSequence;
+			pendingInputs = pendingInputs.filter((input) => input.sequence > acknowledgedSequence);
+			player.set(x, y, z);
+			for (let index = 0; index < pendingInputs.length; index++) {
+				const input = pendingInputs[index];
+				const nextInputTime = pendingInputs[index + 1]?.sentAt ?? performance.now();
+				const elapsed = THREE.MathUtils.clamp((nextInputTime - input.sentAt) / 1000, 0, CONTROL_INTERVAL * 2);
+				applyMovement(player, input.keys, input.yaw, elapsed, input.sprinting);
+			}
+			if (hasServerPosition && !teleported) visualCorrection.set(lastRenderedPlayer.x - player.x, 0, lastRenderedPlayer.z - player.z);
+			else visualCorrection.set(0, 0, 0);
+			previousPlayer.copy(player);
+			hasServerPosition = true;
+		}
+
+		function applyRoomState(players) {
+			const activeIds = new Set();
+			for (const entry of players) {
+				if (entry.id === playerId) {
+					reconcilePlayer(entry.x, Number.isFinite(entry.y) ? entry.y : 0, entry.z, Number.isSafeInteger(entry.lastAppliedInputSequence) ? entry.lastAppliedInputSequence : nextInputSequence);
+					yaw = entry.yaw;
+					playerFacingYaw = Number.isFinite(entry.facingYaw) ? entry.facingYaw : entry.yaw;
+					localMoving = entry.moving;
+					localHealth = Number.isFinite(entry.health) ? entry.health : 100;
+					localRagdolled = entry.ragdolled === true;
+					localCharacter.ragdolled = localRagdolled;
+					if (Number.isSafeInteger(entry.punchSequence) && entry.punchSequence > localCharacter.punchSequence) {
+						if (!localCharacter.punchPredictionPending) localCharacter.punchStartedAt = performance.now();
+						localCharacter.punchPredictionPending = false;
+					}
+					localCharacter.punchSequence = entry.punchSequence ?? localCharacter.punchSequence;
+					if (Number.isSafeInteger(entry.kickSequence) && entry.kickSequence > localCharacter.kickSequence) {
+						if (!localCharacter.kickPredictionPending) localCharacter.kickStartedAt = performance.now();
+						localCharacter.kickPredictionPending = false;
+					}
+					localCharacter.kickSequence = entry.kickSequence ?? localCharacter.kickSequence;
+					localKickCharges = Number.isFinite(entry.kickCharges) ? entry.kickCharges : 0;
+					localHitsLanded = Number.isFinite(entry.hitsLanded) ? entry.hitsLanded : 0;
+					kickStatus.textContent = localKickCharges > 0 ? `KICK x${localKickCharges}` : `${localHitsLanded}/5 HITS`;
+					punchButton.disabled = !localInMatch || matchPhase !== 'active' || localHealth <= 0;
+					kickButton.disabled = !localInMatch || matchPhase !== 'active' || localHealth <= 0 || localKickCharges <= 0;
+					updateNameplate(localNameplate, entry.username, entry.health);
+					continue;
+				}
+				activeIds.add(entry.id);
+				let character = remoteCharacters.get(entry.id);
+				if (!character) {
+					const group = actor.clone(true);
+					group.visible = true;
+					const copiedNameplate = group.getObjectByName('nameplate');
+					if (copiedNameplate) group.remove(copiedNameplate);
+					const nameplate = createNameplate(entry.username, entry.health);
+					group.add(nameplate);
+					group.position.set(entry.x, Number.isFinite(entry.y) ? entry.y : 0, entry.z);
+					scene.add(group);
+					character = {
+						group,
+						walkRig: getWalkRig(group),
+						walkTime: 0,
+						previousWalkTime: 0,
+						moving: entry.moving,
+						ragdolled: entry.ragdolled === true,
+						punchSequence: entry.punchSequence ?? 0,
+						punchStartedAt: 0,
+						kickSequence: entry.kickSequence ?? 0,
+						kickStartedAt: 0,
+						baseY: Number.isFinite(entry.y) ? entry.y : 0,
+						x: entry.x,
+						y: Number.isFinite(entry.y) ? entry.y : 0,
+						z: entry.z,
+						previousX: entry.x,
+						previousY: Number.isFinite(entry.y) ? entry.y : 0,
+						previousZ: entry.z,
+						target: { x: entry.x, y: Number.isFinite(entry.y) ? entry.y : 0, z: entry.z, yaw: Number.isFinite(entry.facingYaw) ? entry.facingYaw : entry.yaw, moving: entry.moving, sprinting: entry.sprinting === true, ragdolled: entry.ragdolled === true }
+					};
+					character.nameplate = nameplate;
+					remoteCharacters.set(entry.id, character);
+				}
+				character.target = {
+					x: entry.x,
+					y: Number.isFinite(entry.y) ? entry.y : 0,
+					z: entry.z,
+					yaw: Number.isFinite(entry.facingYaw) ? entry.facingYaw : entry.yaw,
+					moving: entry.moving,
+					sprinting: entry.sprinting === true,
+					ragdolled: entry.ragdolled === true
+				};
+				if (Number.isSafeInteger(entry.punchSequence) && entry.punchSequence > character.punchSequence) {
+					character.punchStartedAt = performance.now();
+				}
+				character.punchSequence = entry.punchSequence ?? character.punchSequence;
+				if (Number.isSafeInteger(entry.kickSequence) && entry.kickSequence > character.kickSequence) character.kickStartedAt = performance.now();
+				character.kickSequence = entry.kickSequence ?? character.kickSequence;
+				character.ragdolled = entry.ragdolled === true;
+				updateNameplate(character.nameplate, entry.username, entry.health);
+			}
+			for (const [id, character] of remoteCharacters) {
+				if (!activeIds.has(id)) {
+					scene.remove(character.group);
+					remoteCharacters.delete(id);
+				}
+			}
+		}
+
+		function advanceCharacter(character, moving, delta, isSprinting = false) {
+			character.previousWalkTime = character.walkTime;
+			character.moving = moving;
+			if (moving) character.walkTime += delta * (isSprinting ? 13.5 : 9);
+		}
+
+		function renderCharacter(character, alpha) {
+			const walkTime = THREE.MathUtils.lerp(character.previousWalkTime, character.walkTime, alpha);
+			const stride = character.moving ? Math.sin(walkTime) : 0;
+			const punchAge = performance.now() - character.punchStartedAt;
+			const kickAge = performance.now() - character.kickStartedAt;
+			let punchExtension = 0;
+			let kickExtension = 0;
+			if (punchAge >= 0 && punchAge < 60) punchExtension = -0.55 * punchAge / 60;
+			else if (punchAge < 130) punchExtension = -0.55 + 2.05 * (punchAge - 60) / 70;
+			else if (punchAge < 230) punchExtension = 1.5 * (1 - (punchAge - 130) / 100);
+			if (kickAge >= 0 && kickAge < 70) kickExtension = 0.35 * kickAge / 70;
+			else if (kickAge < 160) kickExtension = 0.35 + 1.5 * (kickAge - 70) / 90;
+			else if (kickAge < 300) kickExtension = 1.85 * (1 - (kickAge - 160) / 140);
+			for (const leg of character.walkRig.legs) {
+				const step = Math.sin(walkTime + leg.phaseOffset);
+				const kick = leg.side === 'right' ? kickExtension : 0;
+				leg.pivot.rotation.x = step * 0.62 + kick;
+				leg.knee.rotation.x = Math.max(0, -step) * 0.75 + Math.max(0, kick) * 0.22;
+			}
+			for (const arm of character.walkRig.arms) {
+				const swing = Math.sin(walkTime + arm.phaseOffset);
+				const punch = arm.side === 'right' ? punchExtension : 0;
+				arm.pivot.rotation.x = swing * 0.48 - punch;
+				arm.elbow.rotation.x = Math.max(0, swing) * 0.24 - Math.max(0, punch) * 0.18;
+			}
+			character.group.position.y = character.baseY + (character.moving ? Math.abs(stride) * 0.035 : 0);
+		}
+
+		function update(delta) {
+			previousPlayer.copy(player);
+			applyMovement(player, keys, yaw, delta, sprinting);
+			localCharacter.baseY = player.y;
+			visualCorrection.multiplyScalar(Math.exp(-CORRECTION_DECAY * delta));
+			if (visualCorrection.lengthSq() < 0.000001) visualCorrection.set(0, 0, 0);
+			advanceCharacter(localCharacter, localMoving, delta, sprinting);
+			for (const character of remoteCharacters.values()) {
+				character.previousX = character.x;
+				character.previousY = character.y;
+				character.previousZ = character.z;
+				character.x = THREE.MathUtils.damp(character.x, character.target.x, 12, delta);
+				character.y = THREE.MathUtils.damp(character.y, character.target.y, 12, delta);
+				character.baseY = character.y;
+				character.z = THREE.MathUtils.damp(character.z, character.target.z, 12, delta);
+				advanceCharacter(character, character.target.moving, delta, character.target.sprinting);
+			}
+		}
+
+		function renderFrame(alpha, frameDelta) {
+			const renderedPlayerX = THREE.MathUtils.lerp(previousPlayer.x, player.x, alpha) + visualCorrection.x;
+			const renderedPlayerY = THREE.MathUtils.lerp(previousPlayer.y, player.y, alpha);
+			const renderedPlayerZ = THREE.MathUtils.lerp(previousPlayer.z, player.z, alpha) + visualCorrection.z;
+			lastRenderedPlayer.set(renderedPlayerX, renderedPlayerY, renderedPlayerZ);
+			renderCharacter(localCharacter, alpha);
+			actor.position.set(renderedPlayerX, actor.position.y, renderedPlayerZ);
+				smoothFacing(actor, playerFacingYaw, frameDelta, localRagdolled);
+			for (const character of remoteCharacters.values()) {
+				renderCharacter(character, alpha);
+				character.group.position.set(
+					THREE.MathUtils.lerp(character.previousX, character.x, alpha),
+					THREE.MathUtils.lerp(character.previousY, character.y, alpha) + character.group.position.y - character.baseY,
+					THREE.MathUtils.lerp(character.previousZ, character.z, alpha)
+				);
+				smoothFacing(character.group, character.target.yaw, frameDelta, character.ragdolled);
+			}
+
+			const distance = 5.2;
+			const target = new THREE.Vector3(renderedPlayerX, renderedPlayerY + 1.15, renderedPlayerZ);
+			camera.position.set(
+				renderedPlayerX + Math.sin(yaw) * Math.cos(pitch) * distance,
+				renderedPlayerY + 1.15 + Math.sin(pitch) * distance,
+				renderedPlayerZ + Math.cos(yaw) * Math.cos(pitch) * distance
+			);
+			camera.lookAt(target);
+			positionLabel.textContent = `X ${renderedPlayerX.toFixed(1).padStart(4, '0')} · Z ${renderedPlayerZ.toFixed(1).padStart(4, '0')}`;
+			updateArenaPrompt();
+		}
+
+		function smoothFacing(group, targetYaw, delta, isRagdolled = false) {
+			targetFacingQuaternion.setFromAxisAngle(worldUp, targetYaw);
+			if (isRagdolled) {
+				ragdollQuaternion.setFromAxisAngle(ragdollAxis, -Math.PI / 2);
+				targetFacingQuaternion.multiply(ragdollQuaternion);
+			}
+			group.quaternion.slerp(targetFacingQuaternion, 1 - Math.exp(-TURN_SMOOTHING * delta));
+		}
+
+		function animate(timestamp) {
+			requestAnimationFrame(animate);
+			fpsFrameCount++;
+			if (fpsLastUpdate === 0) fpsLastUpdate = timestamp;
+			const fpsElapsed = timestamp - fpsLastUpdate;
+			if (fpsElapsed >= 500) {
+				fpsLabel.textContent = `FPS: ${Math.round(fpsFrameCount * 1000 / fpsElapsed)}`;
+				fpsFrameCount = 0;
+				fpsLastUpdate = timestamp;
+			}
+			if (previousFrameTime === null) previousFrameTime = timestamp;
+			const frameDelta = Math.min((timestamp - previousFrameTime) / 1000, MAX_FRAME_DELTA);
+			previousFrameTime = timestamp;
+			accumulator = Math.min(accumulator + frameDelta, FIXED_STEP * 5);
+			while (accumulator >= FIXED_STEP) {
+				update(FIXED_STEP);
+				accumulator -= FIXED_STEP;
+			}
+			renderFrame(accumulator / FIXED_STEP, frameDelta);
+			renderer.render(scene, camera);
+		}
+		requestAnimationFrame(animate);
+
+		window.addEventListener('resize', () => {
+			camera.aspect = window.innerWidth / window.innerHeight;
+			camera.updateProjectionMatrix();
+			renderer.setSize(window.innerWidth, window.innerHeight);
+		});
+	</script>
+</body>
+</html>
